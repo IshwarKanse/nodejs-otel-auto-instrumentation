@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TODO App</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .container {
+            width: 100%;
+            max-width: 600px;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            font-size: 24px;
+            color: #4a90e2;
+        }
+        form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 15px;
+            border: none;
+            background-color: #4a90e2;
+            color: #fff;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #357ab8;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        li:nth-child(even) {
+            background-color: #f1f1f1;
+        }
+        .actions {
+            display: flex;
+            gap: 10px;
+        }
+        .actions button {
+            background-color: #e74c3c;
+        }
+        .actions button:hover {
+            background-color: #c0392b;
+        }
+        .actions .update {
+            background-color: #2ecc71;
+        }
+        .actions .update:hover {
+            background-color: #27ae60;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>TODO App</h1>
+
+        <!-- Add TODO -->
+        <form id="addTodoForm">
+            <input type="text" id="newTodoTitle" placeholder="Enter a new TODO" required>
+            <button type="submit">Add TODO</button>
+        </form>
+
+        <!-- TODO List -->
+        <ul id="todoList">
+            <% todos.forEach(todo => { %>
+                <li data-id="<%= todo.id %>">
+                    <input type="text" class="todo-title" value="<%= todo.title %>" required>
+                    <div class="actions">
+                        <button class="update">Update</button>
+                        <button class="delete">Delete</button>
+                    </div>
+                </li>
+            <% }) %>
+        </ul>
+    </div>
+
+    <script>
+        document.getElementById('addTodoForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const title = document.getElementById('newTodoTitle').value;
+            const response = await fetch('/todos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title })
+            });
+            const newTodo = await response.json();
+            addTodoToList(newTodo);
+            document.getElementById('newTodoTitle').value = '';
+        });
+
+        document.getElementById('todoList').addEventListener('click', async function (e) {
+            if (e.target.classList.contains('update')) {
+                const li = e.target.closest('li');
+                const id = li.getAttribute('data-id');
+                const title = li.querySelector('.todo-title').value;
+                await fetch(`/todos/${id}/update`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title })
+                });
+            } else if (e.target.classList.contains('delete')) {
+                const li = e.target.closest('li');
+                const id = li.getAttribute('data-id');
+                await fetch(`/todos/${id}/delete`, {
+                    method: 'DELETE'
+                });
+                li.remove();
+            }
+        });
+
+        function addTodoToList(todo) {
+            const li = document.createElement('li');
+            li.setAttribute('data-id', todo.id);
+            li.innerHTML = `
+                <input type="text" class="todo-title" value="${todo.title}" required>
+                <div class="actions">
+                    <button class="update">Update</button>
+                    <button class="delete">Delete</button>
+                </div>
+            `;
+            document.getElementById('todoList').appendChild(li);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,234 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: otel-auto
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: otel-auto
+data:
+  dbname: postgres
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  namespace: otel-auto
+type: Opaque
+data:
+  username: cG9zdGdyZXM=
+  password: bXlzZWNyZXRwYXNzd29yZA==
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-app
+  namespace: otel-auto
+  labels:
+    app: todo-app
+  annotations:
+    instrumentation.opentelemetry.io/inject-nodejs: "true"
+    instrumentation.opentelemetry.io/nodejs-container-names: todo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: todo-app
+  template:
+    metadata:
+      annotations:
+        instrumentation.opentelemetry.io/inject-nodejs: "true"
+        instrumentation.opentelemetry.io/nodejs-container-names: todo-app
+      labels:
+        app: todo-app
+    spec:
+      containers:
+      - name: todo-app
+        image: hanshal101/nodejs-otel-auto-instrumentation:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://otel-collector-collector.otel-auto.svc.cluster.local:4317"
+        - name: OTEL_SERVICE_NAME
+          value: "todo-app"
+        - name: OTEL_LOGS_EXPORTER
+          value: "otlp"
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: "grpc"
+        - name: OTEL_LOG_LEVEL
+          value: "debug"
+        - name: NODE_OPTIONS
+          value: "--require @opentelemetry/auto-instrumentations-node/register"
+        - name: PORT
+          value: "3000"
+        - name: DB_HOST
+          value: "postgres"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: password
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: postgres-config
+              key: dbname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-app-service
+  namespace: otel-auto
+spec:
+  selector:
+    app: todo-app
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: otel-auto
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:14-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: username
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: password
+        - name: POSTGRES_DB
+          valueFrom:
+            configMapKeyRef:
+              name: postgres-config
+              key: dbname
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: init-sql
+          mountPath: /docker-entrypoint-initdb.d
+      volumes:
+      - name: postgres-data
+        emptyDir: {}
+      - name: init-sql
+        configMap:
+          name: postgres-init-sql
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: otel-auto
+spec:
+  selector:
+    app: postgres
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+  clusterIP: None
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-sql
+  namespace: otel-auto
+data:
+  init.sql: |
+    CREATE TABLE todos (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+---
+# apiVersion: opentelemetry.io/v1beta1
+# kind: OpenTelemetryCollector
+# metadata:
+#   name: otel-collector
+#   namespace: otel-auto
+# spec:
+#   config:
+#     receivers:
+#       otlp:
+#         protocols:
+#           grpc:
+#           http:
+
+#     processors:
+#       memory_limiter:
+#         check_interval: 1s
+#         limit_percentage: 75
+#         spike_limit_percentage: 15
+#       batch:
+#         send_batch_size: 10000
+#         timeout: 10s
+
+#     # exporters:
+#     #   # otlphttp:
+#     #   #   endpoint: "https://otlp-gateway-prod-ap-south-1.grafana.net/otlp"
+#     #   #   headers:
+#     #   #     Authorization: "Basic MTE0NTE0NjpnbGNfZXlKdklqb2lNVE15TkRjMk1pSXNJbTRpT2lKemRHRmpheTB4TVRRMU1UUTJMVzkwYkhBdGQzSnBkR1V0YjNSbGJDMWhkWFJ2TFhSdmEyVnVMV0YxZEdndE1pSXNJbXNpT2lJME5ESnhaRGh5Wm05S1VtY3pRamN4ZFRCa01qbGFRa1lpTENKdElqcDdJbklpT2lKd2NtOWtMV0Z3TFhOdmRYUm9MVEVpZlgwPQ=="
+#     #   debug: 
+#     # service:
+#     #   pipelines:
+#     #     traces:
+#     #       receivers: [otlp]
+#     #       processors: [memory_limiter, batch]
+#     #       exporters: [debug]
+#     #     metrics:
+#     #       receivers: [otlp]
+#     #       processors: [memory_limiter, batch]
+#     #       exporters: [debug]
+#     exporters:
+#       # NOTE: Prior to v0.86.0 use `logging` instead of `debug`.
+#       debug:
+#         verbosity: detailed
+
+#     service:
+#       pipelines:
+#         traces:
+#           receivers: [otlp]
+#           processors: [memory_limiter, batch]
+#           exporters: [debug]
+#         metrics:
+#           receivers: [otlp]
+#           processors: [memory_limiter, batch]
+#           exporters: [debug]
+#         logs:
+#           receivers: [otlp]
+#           processors: [memory_limiter, batch]
+#           exporters: [debug]
