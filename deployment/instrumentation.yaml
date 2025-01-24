@@ -9,10 +9,14 @@ spec:
     env:
       - name: OTEL_LOG_LEVEL
         value: info
-      # - name: OTEL_EXPORTER_OTLP_ENDPOINT
-      #   value: http://otel-collector-collector.otel-auto.svc.cluster.local:4317
+      - name: OTEL_TRACES_EXPORTER
+        value: "otlp"
+      - name: OTEL_METRICS_EXPORTER
+        value: "otlp"
+      - name: OTEL_LOGS_EXPORTER
+        value: "otlp"
   exporter:
-    endpoint: http://10.96.203.216:4317
+    endpoint: http://otel-collector-collector.otel-auto.svc.cluster.local:4317
   propagators:
     - tracecontext
     - baggage
