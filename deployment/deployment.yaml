@@ -98,6 +98,19 @@ spec:
       targetPort: 3000
   type: LoadBalancer
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: otel-auto
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: gp3-csi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -136,6 +149,8 @@ spec:
             configMapKeyRef:
               name: postgres-config
               key: dbname
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
         volumeMounts:
         - name: postgres-data
           mountPath: /var/lib/postgresql/data
@@ -143,7 +158,8 @@ spec:
           mountPath: /docker-entrypoint-initdb.d
       volumes:
       - name: postgres-data
-        emptyDir: {}
+        persistentVolumeClaim:
+          claimName: postgres-pvc
       - name: init-sql
         configMap:
           name: postgres-init-sql
